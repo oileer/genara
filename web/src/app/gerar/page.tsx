@@ -20,6 +20,9 @@ function GerarContent() {
   const [saving, setSaving] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loadingSuggest, setLoadingSuggest] = useState(false);
+  const [showSuggest, setShowSuggest] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -49,6 +52,28 @@ function GerarContent() {
       setError("Erro ao gerar imagem. Tente novamente.");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleSuggest() {
+    if (!selectedBrand) return;
+    setLoadingSuggest(true);
+    setShowSuggest(true);
+    setSuggestions([]);
+    try {
+      const resp = await fetch("/api/post/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brand: selectedBrand, tema }),
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      setSuggestions(data.suggestions);
+    } catch {
+      setSuggestions([]);
+      setShowSuggest(false);
+    } finally {
+      setLoadingSuggest(false);
     }
   }
 
@@ -124,13 +149,26 @@ function GerarContent() {
             {/* Tema */}
             <div className="space-y-2">
               <Label>Tema do post</Label>
-              <Input
-                placeholder="Ex: conta bloqueada no Facebook"
-                value={tema}
-                onChange={(e) => setTema(e.target.value)}
-                className="bg-zinc-900 border-zinc-800"
-                onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
-              />
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: promoção de verão"
+                  value={tema}
+                  onChange={(e) => setTema(e.target.value)}
+                  className="bg-zinc-900 border-zinc-800 flex-1"
+                  onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
+                />
+                <button
+                  type="button"
+                  onClick={handleSuggest}
+                  disabled={!selectedBrandId || loadingSuggest}
+                  className="px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                  title="Sugerir ideias"
+                >
+                  {loadingSuggest ? (
+                    <span className="w-4 h-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin inline-block" />
+                  ) : "💡 Ideias"}
+                </button>
+              </div>
             </div>
 
             {/* Formato */}
@@ -204,6 +242,47 @@ function GerarContent() {
           </div>
         </div>
       </div>
+
+        {/* Modal de sugestões */}
+        {showSuggest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setShowSuggest(false)}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-white font-semibold">
+                  Ideias para {selectedBrand?.name}
+                </h2>
+                <button onClick={() => setShowSuggest(false)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
+              </div>
+
+              {loadingSuggest ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setTema(s); setShowSuggest(false); }}
+                      className="text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-green-400/10 hover:border-green-400 border border-zinc-700 text-zinc-200 hover:text-white text-sm transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!loadingSuggest && suggestions.length > 0 && (
+                <button
+                  onClick={handleSuggest}
+                  className="w-full text-center text-zinc-500 hover:text-zinc-300 text-sm py-1 transition-colors"
+                >
+                  ↻ Gerar novas ideias
+                </button>
+              )}
+            </div>
+          </div>
+        )}
     </div>
   );
 }
