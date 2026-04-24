@@ -1,0 +1,37 @@
+{
+  "name": "Full Contingência",
+  "handle": "fullcontingencia",
+  "segment": "venda e aluguel de ativos digitais para tráfego pago (Facebook, Google, TikTok)",
+  "tone": "direto, urgente, autoritário — fala o idioma do gestor de tráfego pago",
+  "visual_style": "dark cinematic, neon green accents, server room atmosphere, performance marketing aggressive",
+  "colors": {
+    "background": "#0A0A0A",
+    "primary": "#1AFB65",
+    "text": "#FFFFFF",
+    "secondary": "#888888",
+    "danger": "#FF3333"
+  },
+  "typography": {
+    "headline": "Roboto Slab Bold",
+    "body": "Roboto",
+    "ui": "DM Sans"
+  },
+  "copy_examples": {
+    "headline": "SUA CONTA BLOQUEOU DE NOVO?",
+    "subtitle": "Enquanto você espera, seus concorrentes estão escalando.",
+    "cta": "Falar no WhatsApp"
+  },
+  "effects": [
+    "neon green glow halo around central element",
+    "deep atmospheric black fog",
+    "dark server room background",
+    "subtle tech grid overlay",
+    "red danger aura when showing blocked accounts"
+  ],
+  "dont": [
+    "never use orange as primary color",
+    "never use white backgrounds",
+    "never use cheerful or soft tone",
+    "no lorem ipsum or placeholder text"
+  ]
+}

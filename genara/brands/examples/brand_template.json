@@ -1,0 +1,31 @@
+{
+  "name": "Nome da Empresa",
+  "handle": "handle_instagram",
+  "segment": "descrição do segmento e público-alvo",
+  "tone": "como a marca fala — ex: descontraído, urgente, autoritário, elegante",
+  "visual_style": "descrição do estilo visual — ex: dark cinematic, minimalista, colorido",
+  "colors": {
+    "background": "#000000",
+    "primary": "#FFFFFF",
+    "text": "#FFFFFF",
+    "secondary": "#888888"
+  },
+  "typography": {
+    "headline": "fonte dos títulos",
+    "body": "fonte do corpo",
+    "ui": "fonte de botões e labels"
+  },
+  "copy_examples": {
+    "headline": "exemplo de headline da marca",
+    "subtitle": "exemplo de subtítulo",
+    "cta": "chamada para ação padrão"
+  },
+  "effects": [
+    "efeito visual 1",
+    "efeito visual 2"
+  ],
+  "dont": [
+    "o que nunca fazer visualmente",
+    "o que nunca fazer no texto"
+  ]
+}
