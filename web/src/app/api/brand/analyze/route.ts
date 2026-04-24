@@ -59,17 +59,20 @@ Seja específico e preciso. Tudo em português do Brasil com acentuação corret
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           tools: [{ google_search: {} }],
-          generationConfig: { responseMimeType: "application/json" },
         }),
       }
     );
 
     const data = await resp.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const text = parts.find((p: { text?: string }) => p.text)?.text;
 
     if (!text) throw new Error("Sem resposta da IA");
 
-    const brand = JSON.parse(text);
+    // extrai JSON do texto (pode vir com markdown ```json ... ```)
+    const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
+    const jsonStr = jsonMatch ? jsonMatch[1] : text;
+    const brand = JSON.parse(jsonStr);
     return NextResponse.json(brand);
   } catch (e) {
     console.error(e);
