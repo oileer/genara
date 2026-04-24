@@ -48,6 +48,10 @@ Retorne APENAS um JSON array com 5 strings, sem markdown:
       }
     );
 
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      throw new Error(`Gemini API error: ${resp.status} ${errData?.error?.message || resp.statusText}`);
+    }
     const data = await resp.json();
     const parts = data?.candidates?.[0]?.content?.parts || [];
     const text = parts.find((p: { text?: string }) => p.text)?.text;
@@ -60,6 +64,7 @@ Retorne APENAS um JSON array com 5 strings, sem markdown:
     return NextResponse.json({ suggestions: suggestions.slice(0, 5) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    console.error("[post/suggest]", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
