@@ -68,7 +68,7 @@ function GerarContent() {
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      setSuggestions(data.suggestions);
+      setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
     } catch {
       setSuggestions([]);
       setShowSuggest(false);
@@ -259,10 +259,10 @@ function GerarContent() {
                   <span className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
                   {suggestions.map((s, i) => (
                     <button
-                      key={i}
+                      key={`${i}-${s}`}
                       onClick={() => { setTema(s); setShowSuggest(false); }}
                       className="text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-green-400/10 hover:border-green-400 border border-zinc-700 text-zinc-200 hover:text-white text-sm transition-colors"
                     >
