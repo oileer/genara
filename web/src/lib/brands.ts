@@ -7,7 +7,8 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
 
 export interface Brand {
   id?: string;
@@ -20,8 +21,20 @@ export interface Brand {
   copy_examples: { headline: string; subtitle: string; cta: string };
   effects: string[];
   dont: string[];
+  logo_url: string | null;
   createdAt?: unknown;
   updatedAt?: unknown;
+}
+
+export async function uploadBrandLogo(
+  uid: string,
+  brandId: string,
+  file: File
+): Promise<string> {
+  const ext = file.name.split(".").pop() || "png";
+  const storageRef = ref(storage, `logos/${uid}/${brandId}.${ext}`);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
 }
 
 export async function getBrands(uid: string): Promise<Brand[]> {
