@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveToHistory, getApprovedForBrand, HistoryPost } from "@/lib/history";
+import { authFetch } from "@/lib/api";
 
 type Tipo = "post" | "carrossel";
 type Formato = "story" | "feed" | "ambos";
@@ -103,9 +104,8 @@ function GerarContent() {
       let result: GeneratedImage[] = [];
 
       if (tipo === "post") {
-        const resp = await fetch("/api/post/generate", {
+        const resp = await authFetch(user!, "/api/post/generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ brand: selectedBrand, tema, formato, approvedExamples, direcaoVisual }),
         });
         const data = await resp.json();
@@ -129,9 +129,8 @@ function GerarContent() {
           }];
         }
       } else {
-        const resp = await fetch("/api/post/generate-carousel", {
+        const resp = await authFetch(user!, "/api/post/generate-carousel", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ brand: selectedBrand, tema, formato, numSlides, approvedExamples, direcaoVisual }),
         });
         const data = await resp.json();
@@ -189,9 +188,8 @@ function GerarContent() {
     setSuggestions([]);
     const temaParaUsar = temaOverride ?? modalTema ?? tema;
     try {
-      const resp = await fetch("/api/post/suggest", {
+      const resp = await authFetch(user!, "/api/post/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brand: selectedBrand,
           tema: temaParaUsar,
@@ -218,9 +216,8 @@ function GerarContent() {
     if (!editModal || !editInstruction.trim()) return;
     setEditing(true);
     try {
-      const resp = await fetch("/api/post/edit", {
+      const resp = await authFetch(user!, "/api/post/edit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: editModal.src, instruction: editInstruction }),
       });
       const data = await resp.json();

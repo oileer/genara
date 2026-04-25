@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, checkRateLimit, RATE_LIMITS, validateExternalUrl, sanitizeString, safeError, LIMITS } from "@/lib/security";
 
 export const maxDuration = 300;
 
@@ -155,11 +156,23 @@ RULES:
 }
 
 export async function POST(req: NextRequest) {
-  const { brand, tema, formato, numSlides = 3, approvedExamples = [] } = await req.json();
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { allowed, resetIn } = checkRateLimit(`generate:${auth.uid}`, RATE_LIMITS.GENERATE.max, RATE_LIMITS.GENERATE.windowMs);
+  if (!allowed) return NextResponse.json({ error: "Muitas requisições. Tente novamente em alguns minutos." }, { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } });
+
+  const body = await req.json();
+  const { brand, formato, numSlides = 3, approvedExamples = [] } = body;
+  const tema = sanitizeString(body.tema, LIMITS.TEMA);
 
   if (!brand || !tema) {
     return NextResponse.json({ error: "Marca e tema são obrigatórios." }, { status: 400 });
   }
+
+  const safeExamples: ApprovedExample[] = (approvedExamples as ApprovedExample[])
+    .slice(0, LIMITS.MAX_APPROVED_EXAMPLES)
+    .filter((ex) => ex?.imageUrl && validateExternalUrl(ex.imageUrl, true));
 
   try {
     const n = Math.min(Math.max(numSlides, 3), 5);
@@ -169,13 +182,13 @@ export async function POST(req: NextRequest) {
       script.map(async (slide, i) => {
         if (formato === "ambos") {
           const [story, feed] = await Promise.all([
-            generateSlideImage(brand, slide, i + 1, script.length, "9:16 vertical", approvedExamples),
-            generateSlideImage(brand, slide, i + 1, script.length, "1:1 square", approvedExamples),
+            generateSlideImage(brand, slide, i + 1, script.length, "9:16 vertical", safeExamples),
+            generateSlideImage(brand, slide, i + 1, script.length, "1:1 square", safeExamples),
           ]);
           return { story, feed, copy: { headline: slide.headline, subtitle: slide.subtitle, cta: "" } };
         }
         const ratio = formato === "feed" ? "1:1 square" : "9:16 vertical";
-        const image = await generateSlideImage(brand, slide, i + 1, script.length, ratio, approvedExamples);
+        const image = await generateSlideImage(brand, slide, i + 1, script.length, ratio, safeExamples);
         return {
           ...(formato === "feed" ? { feed: image } : { story: image }),
           copy: { headline: slide.headline, subtitle: slide.subtitle, cta: "" },
@@ -185,8 +198,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ slides, script });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[post/generate-carousel]", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[post/generate-carousel]", e instanceof Error ? e.message : e);
+    return safeError("default", 500);
   }
 }

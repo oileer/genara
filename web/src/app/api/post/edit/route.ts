@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, checkRateLimit, RATE_LIMITS, validateExternalUrl, sanitizeString, safeError, LIMITS } from "@/lib/security";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
@@ -12,10 +13,23 @@ async function fetchImageBase64(url: string): Promise<{ data: string; mimeType: 
 }
 
 export async function POST(req: NextRequest) {
-  const { imageUrl, imageBase64, instruction } = await req.json();
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!instruction?.trim()) {
+  const { allowed, resetIn } = checkRateLimit(`edit:${auth.uid}`, RATE_LIMITS.EDIT.max, RATE_LIMITS.EDIT.windowMs);
+  if (!allowed) return NextResponse.json({ error: "Muitas requisições. Tente novamente em alguns minutos." }, { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } });
+
+  const body = await req.json();
+  const { imageBase64, imageUrl } = body;
+  const instruction = sanitizeString(body.instruction, LIMITS.INSTRUCTION);
+
+  if (!instruction) {
     return NextResponse.json({ error: "Instrução obrigatória." }, { status: 400 });
+  }
+
+  // SSRF: validate imageUrl if provided
+  if (imageUrl && !validateExternalUrl(imageUrl, true)) {
+    return safeError("ssrf", 400);
   }
 
   try {
@@ -23,13 +37,11 @@ export async function POST(req: NextRequest) {
     let mimeType: string;
 
     if (imageBase64) {
-      // Imagem recém-gerada (data:image/png;base64,...)
       const match = imageBase64.match(/^data:(.+);base64,(.+)$/);
       if (!match) throw new Error("Formato de imagem inválido");
       mimeType = match[1];
       imgData = match[2];
     } else if (imageUrl) {
-      // Imagem do histórico (URL do Firebase Storage)
       const fetched = await fetchImageBase64(imageUrl);
       imgData = fetched.data;
       mimeType = fetched.mimeType;
@@ -77,8 +89,7 @@ Rules:
 
     return NextResponse.json({ image: `data:image/png;base64,${imgPart.inlineData.data}` });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[post/edit]", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[post/edit]", e instanceof Error ? e.message : e);
+    return safeError("default", 500);
   }
 }

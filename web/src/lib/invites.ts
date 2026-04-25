@@ -36,7 +36,7 @@ export interface BrandAccess {
 }
 
 function generateCode(): string {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
 }
 
 export async function createInvite(

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getBrands, Brand } from "@/lib/brands";
 import { getHistory, HistoryPost } from "@/lib/history";
+import { authFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 function HistoricoContent() {
@@ -38,9 +39,8 @@ function HistoricoContent() {
     if (!editModal || !editInstruction.trim()) return;
     setEditing(true);
     try {
-      const resp = await fetch("/api/post/edit", {
+      const resp = await authFetch(user!, "/api/post/edit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageUrl: editModal.post.imageUrl, instruction: editInstruction }),
       });
       const data = await resp.json();

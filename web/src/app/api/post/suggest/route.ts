@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, checkRateLimit, RATE_LIMITS, validateExternalUrl, sanitizeString, safeError, LIMITS } from "@/lib/security";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const TEXT_MODEL = "gemini-2.5-flash";
@@ -17,11 +18,24 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
 }
 
 export async function POST(req: NextRequest) {
-  const { brand, tema, referenceImages } = await req.json();
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { allowed, resetIn } = checkRateLimit(`suggest:${auth.uid}`, RATE_LIMITS.SUGGEST.max, RATE_LIMITS.SUGGEST.windowMs);
+  if (!allowed) return NextResponse.json({ error: "Muitas requisições. Tente novamente em alguns minutos." }, { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } });
+
+  const body = await req.json();
+  const { brand, referenceImages } = body;
+  const tema = sanitizeString(body.tema, LIMITS.TEMA);
 
   if (!brand) {
     return NextResponse.json({ error: "Marca obrigatória." }, { status: 400 });
   }
+
+  // Validate reference image URLs (SSRF prevention)
+  const safeReferenceImages: string[] = Array.isArray(referenceImages)
+    ? (referenceImages as string[]).slice(0, LIMITS.MAX_REFERENCE_IMAGES).filter((url) => validateExternalUrl(url, true))
+    : [];
 
   const context = tema?.trim()
     ? `O usuário começou a digitar: "${tema}". Gere 5 variações ou expansões desse tema.`
@@ -38,7 +52,7 @@ Estilo visual: ${brand.visual_style}
 
 ${context}
 
-${(referenceImages?.length) ? `As imagens acima são referências visuais da marca — use o estilo, ambiente e mensagem delas para inspirar os temas.` : ""}
+${safeReferenceImages.length ? `As imagens acima são referências visuais da marca — use o estilo, ambiente e mensagem delas para inspirar os temas.` : ""}
 
 Regras:
 - Cada tema deve ser curto (máximo 8 palavras), direto e impactante
@@ -51,13 +65,10 @@ Retorne APENAS um JSON array com 5 strings, sem markdown:
 `.trim();
 
   try {
-    // Monta parts: imagens de referência + texto
     const parts: unknown[] = [];
 
-    if (referenceImages?.length) {
-      const imageResults = await Promise.all(
-        (referenceImages as string[]).slice(0, 4).map(fetchImageAsBase64)
-      );
+    if (safeReferenceImages.length) {
+      const imageResults = await Promise.all(safeReferenceImages.slice(0, 4).map(fetchImageAsBase64));
       for (const img of imageResults) {
         if (img) {
           parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
@@ -94,8 +105,7 @@ Retorne APENAS um JSON array com 5 strings, sem markdown:
 
     return NextResponse.json({ suggestions: suggestions.slice(0, 5) });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[post/suggest]", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[post/suggest]", e instanceof Error ? e.message : e);
+    return safeError("default", 500);
   }
 }

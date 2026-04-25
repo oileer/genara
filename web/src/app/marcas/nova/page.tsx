@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { createBrand, Brand } from "@/lib/brands";
+import { authFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,9 +35,8 @@ export default function NovaMarcaPage() {
     setError("");
     setStep(1);
     try {
-      const resp = await fetch("/api/brand/analyze", {
+      const resp = await authFetch(user!, "/api/brand/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(inputs),
       });
       const data = await resp.json();

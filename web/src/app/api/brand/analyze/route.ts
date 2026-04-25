@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, checkRateLimit, RATE_LIMITS, validateExternalUrl, sanitizeString, safeError, LIMITS } from "@/lib/security";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = "gemini-2.5-flash";
@@ -11,7 +12,6 @@ async function extractColorsFromSite(url: string): Promise<string> {
     });
     const html = await res.text();
 
-    // coleta CSS inline (<style> tags) + atributos style=""
     const cssChunks: string[] = [];
 
     const styleTags = html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi);
@@ -20,12 +20,14 @@ async function extractColorsFromSite(url: string): Promise<string> {
     const inlineStyles = html.matchAll(/style="([^"]+)"/gi);
     for (const m of inlineStyles) cssChunks.push(m[1]);
 
-    // busca URLs de stylesheets externos
+    // Only fetch external stylesheets from trusted/same-origin URLs
     const linkTags = html.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]*href=["']([^"']+)["']/gi);
     const base = new URL(url);
     for (const m of linkTags) {
       try {
         const cssUrl = new URL(m[1], base).toString();
+        // SSRF: validate resolved stylesheet URL
+        if (!validateExternalUrl(cssUrl)) continue;
         const cssRes = await fetch(cssUrl, { signal: AbortSignal.timeout(4000) });
         cssChunks.push(await cssRes.text());
       } catch { /* ignora CSS externo que falhar */ }
@@ -33,11 +35,9 @@ async function extractColorsFromSite(url: string): Promise<string> {
 
     const allCss = cssChunks.join("\n");
 
-    // extrai todas as cores hex e rgb/rgba
     const hexColors = [...allCss.matchAll(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g)].map(m => m[0]);
     const rgbColors = [...allCss.matchAll(/rgba?\([^)]+\)/g)].map(m => m[0]);
 
-    // conta frequência
     const freq: Record<string, number> = {};
     for (const c of [...hexColors, ...rgbColors]) {
       freq[c] = (freq[c] || 0) + 1;
@@ -56,10 +56,24 @@ async function extractColorsFromSite(url: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const { name, instagram, site } = await req.json();
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { allowed, resetIn } = checkRateLimit(`analyze:${auth.uid}`, RATE_LIMITS.ANALYZE.max, RATE_LIMITS.ANALYZE.windowMs);
+  if (!allowed) return NextResponse.json({ error: "Muitas requisições. Tente novamente em alguns minutos." }, { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } });
+
+  const body = await req.json();
+  const name = sanitizeString(body.name, LIMITS.BRAND_FIELD);
+  const instagram = sanitizeString(body.instagram, LIMITS.BRAND_FIELD);
+  const site = sanitizeString(body.site, LIMITS.URL);
 
   if (!name || !instagram) {
     return NextResponse.json({ error: "Nome e Instagram são obrigatórios." }, { status: 400 });
+  }
+
+  // SSRF: validate site URL before fetching
+  if (site && !validateExternalUrl(site)) {
+    return safeError("ssrf", 400);
   }
 
   const siteColors = site ? await extractColorsFromSite(site) : "site não informado";
@@ -125,15 +139,14 @@ Seja específico e preciso. Tudo em português do Brasil com acentuação corret
     const parts = data?.candidates?.[0]?.content?.parts || [];
     const text = parts.find((p: { text?: string }) => p.text)?.text;
 
-    if (!text) throw new Error(`Sem resposta da IA. Status: ${resp.status}. Data: ${JSON.stringify(data).slice(0, 500)}`);
+    if (!text) throw new Error(`Sem resposta da IA. Status: ${resp.status}.`);
 
     const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
     const jsonStr = jsonMatch ? jsonMatch[1] : text;
     const brand = JSON.parse(jsonStr);
     return NextResponse.json(brand);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[brand/analyze]", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[brand/analyze]", e instanceof Error ? e.message : e);
+    return safeError("default", 500);
   }
 }
