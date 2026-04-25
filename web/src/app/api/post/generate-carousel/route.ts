@@ -104,30 +104,27 @@ async function generateSlideImage(
     : slideNum === totalSlides ? "CTA slide — drive action, clear call to action"
     : `content slide ${slideNum} — develop the narrative`;
 
-  const mainPrompt = `Create a ${ratio} carousel slide image for a Brazilian brand. Slide ${slideNum} of ${totalSlides} — ${slideRole}.
+  const mainPrompt = `Create a ${ratio} carousel slide image. Slide ${slideNum} of ${totalSlides} — ${slideRole}.
 
 Brand: ${brand.name} — ${brand.segment}
 Visual style: ${brand.visual_style}
-Central visual element: ${slide.visual_description}
+Central visual: ${slide.visual_description}
 
-TEXT TO RENDER IN THIS SLIDE (render exactly):
-- HEADLINE (dominant): ${slide.headline}
-- Subtitle (supporting): ${slide.subtitle}
+HEADLINE (the ONLY text — render it once, exactly):
+"${slide.headline}"
 
 Color palette:
-- Background: ${brand.colors.background} (MUST be consistent across all ${totalSlides} slides)
-- Primary accent: ${brand.colors.primary}
-- Keep the same visual identity on every slide
+- Background: ${brand.colors.background} (keep consistent across ALL ${totalSlides} slides)
+- Accent: ${brand.colors.primary}
 
 Visual effects: ${brand.effects?.join(", ") || "cinematic dark atmosphere"}
 
-CREATIVE DIRECTION:
-- Slide ${slideNum} of ${totalSlides}: the typography and composition should feel like part of the same story arc
-- Break generic layouts — be bold with type scale, placement, integration with the visual
-- Slide 1: explosive, high-impact, stops the scroll
-- Middle slides: visual continuity, the reader feels progression
-- Last slide: action-oriented, energetic
-- Ultra high contrast, cinematic lighting
+RULES:
+- Render the headline ONCE — do NOT repeat or add extra words
+- NO subtitle, NO extra copy — only the headline
+- Same background color and visual identity on every slide for carousel cohesion
+- ${slideNum === 1 ? "Slide 1: explosive hook, stops the scroll" : slideNum === totalSlides ? "Last slide: action energy, strong composition" : `Slide ${slideNum}: continuation of the visual story`}
+- Ultra high contrast, cinematic lighting, photo-realistic
 - No watermarks, no borders
 - Do NOT include: ${brand.dont?.join(", ") || "low quality elements"}`;
 

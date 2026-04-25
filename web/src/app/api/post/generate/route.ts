@@ -97,35 +97,29 @@ async function generateImage(
     }
   }
 
-  const mainPrompt = `Create a ${ratio} social media post image for a Brazilian brand. This is a COMPLETE final post — typography, visual and layout all integrated.
+  const mainPrompt = `Create a ${ratio} social media post image for a Brazilian brand. Integrated typography + visual — one powerful image.
 
 Brand: ${brand.name} — ${brand.segment}
 Visual style: ${brand.visual_style}
 Topic: ${tema}
 
-TEXT TO RENDER IN THE IMAGE (render these exactly, no changes):
-- HEADLINE (big, bold, prominent): ${copy.headline}
-- Subtitle (smaller, elegant): ${copy.subtitle}
-- CTA (small, bottom area): ${copy.cta}
-- Handle (very small, subtle): @${brand.handle}
+HEADLINE (the ONLY text in the image — render it once, exactly):
+"${copy.headline}"
 
 Color palette:
 - Background: ${brand.colors.background}
-- Primary accent: ${brand.colors.primary}
-- Text: ${brand.colors.text}
+- Accent: ${brand.colors.primary}
 
 Visual effects: ${brand.effects?.join(", ") || "cinematic dark atmosphere"}
 
-CREATIVE DIRECTION — be bold and unexpected:
-- Break the standard "text at the bottom" template
-- Experiment: huge type behind the visual, text integrated into the scene, minimal text on rich visual, diagonal layouts, centered dramatic composition, text as part of the art
-- Each post must feel unique — not a template
-- Ultra high contrast, cinematic lighting, photo-realistic quality
-- The typography must be legible and beautiful
-- No watermarks, no logos, no borders
-- Do NOT include: ${brand.dont?.join(", ") || "low quality elements, clipart"}
-
-Think like a world-class creative director. Make it stunning.`;
+RULES:
+- Render the headline ONCE — do NOT repeat it, do NOT add extra words
+- NO subtitle, NO CTA text, NO handle, NO extra copy in the image
+- Minimal text, maximum visual impact — let the image speak
+- Bold creative layout: headline can be huge, small, centered, diagonal, integrated into scene — surprise me
+- Ultra high contrast, cinematic lighting, photo-realistic
+- No watermarks, no borders
+- Do NOT include: ${brand.dont?.join(", ") || "low quality elements, clipart"}`;
 
   const parts = [...exampleParts, { text: mainPrompt }];
 
