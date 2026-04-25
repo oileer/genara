@@ -44,6 +44,19 @@ export async function createInvite(
   brandName: string,
   email: string
 ): Promise<string> {
+  // Bloqueia convite duplicado para o mesmo email+marca
+  if (email.trim()) {
+    const q = query(
+      collection(db, "invitations"),
+      where("ownerId", "==", ownerId),
+      where("brandId", "==", brandId),
+      where("email", "==", email.trim()),
+      where("status", "in", ["pending", "accepted"])
+    );
+    const existing = await getDocs(q);
+    if (!existing.empty) throw new Error("duplicate");
+  }
+
   const code = generateCode();
   await addDoc(collection(db, "invitations"), {
     code,
@@ -51,7 +64,7 @@ export async function createInvite(
     brandName,
     ownerId,
     ownerName,
-    email,
+    email: email.trim(),
     status: "pending",
     createdAt: serverTimestamp(),
   });

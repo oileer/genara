@@ -95,22 +95,28 @@ export default function MarcasPage() {
                   >
                     Gerar post
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 h-9"
-                    onClick={() => router.push(`/marcas/${brand.id}`)}
-                  >
-                    ✎
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-400 h-9"
-                    onClick={() => handleDelete(brand.id!)}
-                  >
-                    ✕
-                  </Button>
+                  {brand.ownerId === user?.uid || !brand.ownerId ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600 h-9"
+                        onClick={() => router.push(`/marcas/${brand.id}`)}
+                      >
+                        ✎
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-400 h-9"
+                        onClick={() => handleDelete(brand.id!)}
+                      >
+                        ✕
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-zinc-600 text-xs self-center px-1">colaborador</span>
+                  )}
                 </div>
               </div>
             ))}

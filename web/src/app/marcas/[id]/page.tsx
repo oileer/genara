@@ -89,8 +89,9 @@ export default function EditarMarcaPage() {
       setInviteLink(link);
       setInviteEmail("");
       getBrandInvites(user.uid, brandId).then(setInvites).catch(() => {});
-    } catch {
-      setError("Erro ao criar convite.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setError(msg === "duplicate" ? "Esse email já foi convidado para essa marca." : "Erro ao criar convite.");
     } finally {
       setInviting(false);
     }
@@ -119,6 +120,48 @@ export default function EditarMarcaPage() {
       <div className="w-8 h-8 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+
+  // Colaborador: redireciona direto para gerar
+  if (!isOwner) {
+    return (
+      <div className="min-h-screen bg-black px-4 py-12">
+        <div className="max-w-xl mx-auto space-y-8">
+          <div>
+            <button onClick={() => router.push("/marcas")} className="text-zinc-500 text-sm hover:text-white mb-4 block">
+              ← Voltar
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg flex-shrink-0" style={{ backgroundColor: brand.colors.primary }} />
+              <div>
+                <h1 className="text-2xl font-bold text-white">{brand.name}</h1>
+                <p className="text-zinc-500 text-sm">@{brand.handle} · <span className="text-zinc-600">colaborador</span></p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-2">
+            <p className="text-zinc-400 text-sm"><span className="text-white font-medium">Segmento:</span> {brand.segment}</p>
+            <p className="text-zinc-400 text-sm"><span className="text-white font-medium">Tom:</span> {brand.tone}</p>
+            <p className="text-zinc-400 text-sm"><span className="text-white font-medium">Estilo visual:</span> {brand.visual_style}</p>
+          </div>
+          {(brand.reference_images || []).length > 0 && (
+            <div className="space-y-2">
+              <p className="text-zinc-500 text-xs uppercase tracking-wider font-semibold">Imagens de referência</p>
+              <div className="grid grid-cols-4 gap-2">
+                {(brand.reference_images || []).map((url) => (
+                  <div key={url} className="aspect-square rounded-lg overflow-hidden border border-zinc-800">
+                    <img src={url} alt="referência" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <Button onClick={() => router.push(`/gerar?brandId=${brand.id}`)} className="w-full bg-green-400 text-black hover:bg-green-300 font-semibold h-12">
+            Gerar post →
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black px-4 py-12">
@@ -178,7 +221,6 @@ export default function EditarMarcaPage() {
             <p className="text-zinc-500 text-xs mt-1">Posts do seu Instagram ou imagens que representam o estilo da marca. A IA usa como contexto visual para gerar posts.</p>
           </div>
 
-          {/* Grid de uploads existentes */}
           {(brand.reference_images || []).length > 0 && (
             <div className="grid grid-cols-4 gap-2">
               {(brand.reference_images || []).map((url) => (
