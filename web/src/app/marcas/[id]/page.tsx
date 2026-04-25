@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getBrands, updateBrand, uploadReferenceImage, Brand } from "@/lib/brands";
-import { createInvite, getBrandInvites, Invite } from "@/lib/invites";
+import { createInvite, getBrandInvites, removeCollaborator, Invite } from "@/lib/invites";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,6 +93,17 @@ export default function EditarMarcaPage() {
       setError("Erro ao criar convite.");
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function handleRemoveCollaborator(invite: Invite) {
+    if (!invite.id || !invite.acceptedByUid) return;
+    if (!confirm(`Remover acesso de ${invite.email || invite.acceptedByUid}?`)) return;
+    try {
+      await removeCollaborator(invite.id, invite.acceptedByUid, brandId);
+      setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    } catch {
+      setError("Erro ao remover colaborador.");
     }
   }
 
@@ -251,9 +262,20 @@ export default function EditarMarcaPage() {
                 {invites.map((inv) => (
                   <div key={inv.id} className="flex items-center justify-between text-xs px-3 py-2 bg-zinc-900 rounded-lg border border-zinc-800">
                     <span className="text-zinc-400">{inv.email || "Sem email"}</span>
-                    <span className={`px-2 py-0.5 rounded-full ${inv.status === "accepted" ? "bg-green-400/20 text-green-400" : "bg-zinc-700 text-zinc-400"}`}>
-                      {inv.status === "accepted" ? "✓ Aceito" : "Pendente"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full ${inv.status === "accepted" ? "bg-green-400/20 text-green-400" : "bg-zinc-700 text-zinc-400"}`}>
+                        {inv.status === "accepted" ? "✓ Aceito" : "Pendente"}
+                      </span>
+                      {inv.status === "accepted" && inv.acceptedByUid && (
+                        <button
+                          onClick={() => handleRemoveCollaborator(inv)}
+                          className="text-zinc-600 hover:text-red-400 transition-colors px-1"
+                          title="Remover acesso"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

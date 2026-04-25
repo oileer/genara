@@ -5,6 +5,7 @@ import {
   getDocs,
   doc,
   updateDoc,
+  deleteDoc,
   setDoc,
   query,
   where,
@@ -21,6 +22,7 @@ export interface Invite {
   ownerName: string;
   email: string;
   status: "pending" | "accepted";
+  acceptedByUid?: string;
   createdAt?: unknown;
 }
 
@@ -66,7 +68,7 @@ export async function getInviteByCode(code: string): Promise<Invite | null> {
 
 export async function acceptInvite(inviteId: string, invite: Invite, uid: string): Promise<void> {
   // Marca convite como aceito
-  await updateDoc(doc(db, "invitations", inviteId), { status: "accepted" });
+  await updateDoc(doc(db, "invitations", inviteId), { status: "accepted", acceptedByUid: uid });
 
   // Adiciona referência de acesso para o usuário (usando brandId como ID do doc)
   await setDoc(doc(db, "user_access", uid, "brands", invite.brandId), {
@@ -83,6 +85,11 @@ export async function getSharedBrandRefs(uid: string): Promise<BrandAccess[]> {
   } catch {
     return [];
   }
+}
+
+export async function removeCollaborator(inviteId: string, collaboratorUid: string, brandId: string): Promise<void> {
+  await updateDoc(doc(db, "invitations", inviteId), { status: "removed" });
+  await deleteDoc(doc(db, "user_access", collaboratorUid, "brands", brandId));
 }
 
 export async function getBrandInvites(ownerId: string, brandId: string): Promise<Invite[]> {
