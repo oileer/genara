@@ -68,7 +68,14 @@ export async function getBrands(uid: string): Promise<Brand[]> {
       })
     );
     const validShared = sharedBrands.filter(Boolean) as Brand[];
-    return [...ownBrands, ...validShared];
+    const all = [...ownBrands, ...validShared];
+    const seen = new Set<string>();
+    return all.filter((b) => {
+      const key = `${b.ownerId}-${b.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   } catch {
     return ownBrands;
   }
