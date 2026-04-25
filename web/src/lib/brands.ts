@@ -64,7 +64,11 @@ export async function getBrands(uid: string): Promise<Brand[]> {
         const { ownerId, brandId } = accessDoc.data();
         const brandSnap = await getDoc(doc(db, "brands", ownerId, "list", brandId));
         if (!brandSnap.exists()) return null;
-        return { id: brandSnap.id, ownerId, ...brandSnap.data() } as Brand;
+        const brandData = brandSnap.data();
+        // Verifica se ainda está no array members (não foi removido pelo dono)
+        const members: string[] = brandData.members || [];
+        if (!members.includes(uid)) return null;
+        return { id: brandSnap.id, ownerId, ...brandData } as Brand;
       })
     );
     const validShared = sharedBrands.filter(Boolean) as Brand[];

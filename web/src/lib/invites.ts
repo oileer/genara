@@ -7,6 +7,8 @@ import {
   updateDoc,
   deleteDoc,
   setDoc,
+  arrayUnion,
+  arrayRemove,
   query,
   where,
   serverTimestamp,
@@ -80,14 +82,18 @@ export async function getInviteByCode(code: string): Promise<Invite | null> {
 }
 
 export async function acceptInvite(inviteId: string, invite: Invite, uid: string): Promise<void> {
-  // Marca convite como aceito
   await updateDoc(doc(db, "invitations", inviteId), { status: "accepted", acceptedByUid: uid });
 
-  // Adiciona referência de acesso para o usuário (usando brandId como ID do doc)
+  // Referência de acesso no user_access do colaborador
   await setDoc(doc(db, "user_access", uid, "brands", invite.brandId), {
     ownerId: invite.ownerId,
     brandId: invite.brandId,
     brandName: invite.brandName,
+  });
+
+  // Adiciona UID no array members da marca (dono pode sempre editar)
+  await updateDoc(doc(db, "brands", invite.ownerId, "list", invite.brandId), {
+    members: arrayUnion(uid),
   });
 }
 
@@ -100,9 +106,24 @@ export async function getSharedBrandRefs(uid: string): Promise<BrandAccess[]> {
   }
 }
 
-export async function removeCollaborator(inviteId: string, collaboratorUid: string, brandId: string): Promise<void> {
+export async function removeCollaborator(
+  inviteId: string,
+  invite: Invite,
+  ownerId: string
+): Promise<void> {
+  // Marca convite como removido
   await updateDoc(doc(db, "invitations", inviteId), { status: "removed" });
-  await deleteDoc(doc(db, "user_access", collaboratorUid, "brands", brandId));
+
+  // Remove UID do array members da marca (dono tem permissão)
+  if (invite.acceptedByUid) {
+    await updateDoc(doc(db, "brands", ownerId, "list", invite.brandId), {
+      members: arrayRemove(invite.acceptedByUid),
+    });
+    // Tenta limpar user_access (pode falhar por permissão — não é crítico)
+    try {
+      await deleteDoc(doc(db, "user_access", invite.acceptedByUid, "brands", invite.brandId));
+    } catch { /* silencioso — o members já foi removido */ }
+  }
 }
 
 export async function getBrandInvites(ownerId: string, brandId: string): Promise<Invite[]> {

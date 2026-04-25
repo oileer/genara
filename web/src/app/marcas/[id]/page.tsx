@@ -98,10 +98,10 @@ export default function EditarMarcaPage() {
   }
 
   async function handleRemoveCollaborator(invite: Invite) {
-    if (!invite.id || !invite.acceptedByUid) return;
-    if (!confirm(`Remover acesso de ${invite.email || invite.acceptedByUid}?`)) return;
+    if (!invite.id || !user) return;
+    if (!confirm(`Remover acesso de ${invite.email || "colaborador"}?`)) return;
     try {
-      await removeCollaborator(invite.id, invite.acceptedByUid, brandId);
+      await removeCollaborator(invite.id, invite, user.uid);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch {
       setError("Erro ao remover colaborador.");
@@ -308,7 +308,7 @@ export default function EditarMarcaPage() {
                       <span className={`px-2 py-0.5 rounded-full ${inv.status === "accepted" ? "bg-green-400/20 text-green-400" : "bg-zinc-700 text-zinc-400"}`}>
                         {inv.status === "accepted" ? "✓ Aceito" : "Pendente"}
                       </span>
-                      {inv.status === "accepted" && inv.acceptedByUid && (
+                      {inv.status === "accepted" && (
                         <button
                           onClick={() => handleRemoveCollaborator(inv)}
                           className="text-zinc-600 hover:text-red-400 transition-colors px-1"
