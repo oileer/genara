@@ -24,7 +24,7 @@ interface Brand {
 
 interface ApprovedExample {
   imageUrl: string;
-  copy: PostCopy;
+  copy: { headline: string; subtitle: string; cta: string };
 }
 
 async function generatePostCopy(brand: Brand, tema: string): Promise<PostCopy> {
@@ -77,6 +77,7 @@ async function fetchImageBase64(url: string): Promise<string> {
 
 async function generateImage(
   brand: Brand,
+  copy: PostCopy,
   tema: string,
   ratio: "9:16 vertical" | "1:1 square",
   approvedExamples: ApprovedExample[]
@@ -85,38 +86,46 @@ async function generateImage(
 
   if (approvedExamples.length > 0) {
     exampleParts.push({
-      text: `These are previously approved posts for this brand. Study their visual style, colors, lighting and composition — replicate the same aesthetic quality:`,
+      text: `These are previously approved posts for this brand. Study their visual style, typography placement, colors, lighting and composition — replicate the same creative energy:`,
     });
     for (const ex of approvedExamples) {
       try {
         const b64 = await fetchImageBase64(ex.imageUrl);
         exampleParts.push({ inlineData: { mimeType: "image/png", data: b64 } });
-        exampleParts.push({ text: `Approved visual for copy: "${ex.copy.headline}"` });
+        exampleParts.push({ text: `Reference post — headline: "${ex.copy.headline}"` });
       } catch { /* skip example if fetch fails */ }
     }
   }
 
-  const mainPrompt = `Generate a ${ratio} photo-realistic marketing background image for Brazilian social media.
+  const mainPrompt = `Create a ${ratio} social media post image for a Brazilian brand. This is a COMPLETE final post — typography, visual and layout all integrated.
 
 Brand: ${brand.name} — ${brand.segment}
 Visual style: ${brand.visual_style}
-Topic to represent visually: ${tema}
+Topic: ${tema}
+
+TEXT TO RENDER IN THE IMAGE (render these exactly, no changes):
+- HEADLINE (big, bold, prominent): ${copy.headline}
+- Subtitle (smaller, elegant): ${copy.subtitle}
+- CTA (small, bottom area): ${copy.cta}
+- Handle (very small, subtle): @${brand.handle}
 
 Color palette:
-- Background: ${brand.colors.background} (dominant — use this as the main background color)
-- Primary accent: ${brand.colors.primary} (glows, neon highlights, key elements)
-- Keep palette consistent
+- Background: ${brand.colors.background}
+- Primary accent: ${brand.colors.primary}
+- Text: ${brand.colors.text}
 
 Visual effects: ${brand.effects?.join(", ") || "cinematic dark atmosphere"}
-Central visual element: one powerful image representing "${tema}"
 
-⚠️ CRITICAL RULES:
-- DO NOT render ANY text, letters, words, numbers or characters in the image
-- Generate ONLY the background visual — text will be added programmatically
-- Ultra high contrast, cinematic dramatic lighting
-- Photo-realistic quality
-- No watermarks, no borders, no frames
-- Do NOT include: ${brand.dont?.join(", ") || "low quality elements, clipart"}`;
+CREATIVE DIRECTION — be bold and unexpected:
+- Break the standard "text at the bottom" template
+- Experiment: huge type behind the visual, text integrated into the scene, minimal text on rich visual, diagonal layouts, centered dramatic composition, text as part of the art
+- Each post must feel unique — not a template
+- Ultra high contrast, cinematic lighting, photo-realistic quality
+- The typography must be legible and beautiful
+- No watermarks, no logos, no borders
+- Do NOT include: ${brand.dont?.join(", ") || "low quality elements, clipart"}
+
+Think like a world-class creative director. Make it stunning.`;
 
   const parts = [...exampleParts, { text: mainPrompt }];
 
@@ -156,14 +165,14 @@ export async function POST(req: NextRequest) {
 
     if (formato === "ambos") {
       const [story, feed] = await Promise.all([
-        generateImage(brand, tema, "9:16 vertical", approvedExamples),
-        generateImage(brand, tema, "1:1 square", approvedExamples),
+        generateImage(brand, copy, tema, "9:16 vertical", approvedExamples),
+        generateImage(brand, copy, tema, "1:1 square", approvedExamples),
       ]);
       return NextResponse.json({ images: { story, feed }, copy });
     }
 
     const ratio = formato === "feed" ? "1:1 square" : "9:16 vertical";
-    const image = await generateImage(brand, tema, ratio, approvedExamples);
+    const image = await generateImage(brand, copy, tema, ratio, approvedExamples);
     return NextResponse.json({ image, copy });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

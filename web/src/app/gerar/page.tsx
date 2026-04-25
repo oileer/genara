@@ -6,13 +6,7 @@ import { getBrands, Brand } from "@/lib/brands";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { overlayTextOnImage, OverlayCopy } from "@/lib/canvas-overlay";
-import {
-  saveApprovedPost,
-  getApprovedPostsForBrand,
-  fetchImageAsBase64,
-  ApprovedPost,
-} from "@/lib/approved-posts";
+import { saveToHistory, getApprovedForBrand, HistoryPost } from "@/lib/history";
 
 type Tipo = "post" | "carrossel";
 type Formato = "story" | "feed" | "ambos";
@@ -21,9 +15,10 @@ interface GeneratedImage {
   label: string;
   src: string;
   aspect: "9/16" | "1/1";
-  copy: OverlayCopy;
+  copy: { headline: string; subtitle: string; cta: string };
   approved: boolean;
   saving: boolean;
+  historyId?: string;
 }
 
 function GerarContent() {
@@ -53,20 +48,29 @@ function GerarContent() {
 
   const selectedBrand = brands.find((b) => b.id === selectedBrandId);
 
-  async function buildApprovedExamples(): Promise<ApprovedPost[]> {
+  async function buildApprovedExamples(): Promise<HistoryPost[]> {
     if (!user || !selectedBrandId) return [];
-    return getApprovedPostsForBrand(user.uid, selectedBrandId, 2);
+    return getApprovedForBrand(user.uid, selectedBrandId, 3);
   }
 
-  async function applyOverlay(src: string, copy: OverlayCopy): Promise<string> {
-    try {
-      return await overlayTextOnImage(src, copy, {
-        primary: selectedBrand?.colors?.primary || "#22C55E",
-        text: selectedBrand?.colors?.text || "#FFFFFF",
-      });
-    } catch {
-      return src; // fallback: imagem sem overlay se canvas falhar
-    }
+  async function saveImagesToHistory(imgs: GeneratedImage[]) {
+    if (!user || !selectedBrand || !selectedBrandId) return;
+    // fire-and-forget: não bloqueia a UI
+    imgs.forEach((img) => {
+      saveToHistory(
+        user.uid,
+        {
+          brandId: selectedBrandId,
+          brandName: selectedBrand.name,
+          tema,
+          formato: img.aspect === "9/16" ? "story" : "feed",
+          tipo,
+          copy: img.copy,
+          approved: false,
+        },
+        img.src
+      ).catch(() => {/* silent */});
+    });
   }
 
   async function handleGenerate() {
@@ -77,6 +81,7 @@ function GerarContent() {
 
     try {
       const approvedExamples = await buildApprovedExamples();
+      let result: GeneratedImage[] = [];
 
       if (tipo === "post") {
         const resp = await fetch("/api/post/generate", {
@@ -87,32 +92,22 @@ function GerarContent() {
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
 
-        const copy: OverlayCopy = {
-          headline: data.copy.headline,
-          subtitle: data.copy.subtitle,
-          cta: data.copy.cta,
-          handle: `@${selectedBrand.handle}`,
-        };
+        const copy = { headline: data.copy.headline, subtitle: data.copy.subtitle, cta: data.copy.cta };
 
         if (formato === "ambos") {
-          const [storySrc, feedSrc] = await Promise.all([
-            applyOverlay(data.images.story, copy),
-            applyOverlay(data.images.feed, copy),
-          ]);
-          setImages([
-            { label: "Story (9:16)", src: storySrc, aspect: "9/16", copy, approved: false, saving: false },
-            { label: "Feed (1:1)", src: feedSrc, aspect: "1/1", copy, approved: false, saving: false },
-          ]);
+          result = [
+            { label: "Story (9:16)", src: data.images.story, aspect: "9/16", copy, approved: false, saving: false },
+            { label: "Feed (1:1)", src: data.images.feed, aspect: "1/1", copy, approved: false, saving: false },
+          ];
         } else {
-          const finalSrc = await applyOverlay(data.image, copy);
-          setImages([{
+          result = [{
             label: formato === "story" ? "Story (9:16)" : "Feed (1:1)",
-            src: finalSrc,
+            src: data.image,
             aspect: formato === "story" ? "9/16" : "1/1",
             copy,
             approved: false,
             saving: false,
-          }]);
+          }];
         }
       } else {
         const resp = await fetch("/api/post/generate-carousel", {
@@ -123,38 +118,19 @@ function GerarContent() {
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
 
-        const result: GeneratedImage[] = [];
-        await Promise.all(
-          (data.slides as { story?: string; feed?: string; copy: { headline: string; subtitle: string; cta: string } }[]).map(
-            async (slide, i) => {
-              const copy: OverlayCopy = {
-                headline: slide.copy.headline,
-                subtitle: slide.copy.subtitle,
-                cta: slide.copy.cta || "",
-                handle: `@${selectedBrand.handle}`,
-              };
-              if (slide.story) {
-                const src = await applyOverlay(slide.story, copy);
-                result[i * (formato === "ambos" ? 2 : 1)] = {
-                  label: `Slide ${i + 1}${formato === "ambos" ? " — Story" : ""}`,
-                  src, aspect: "9/16", copy, approved: false, saving: false,
-                };
-              }
-              if (slide.feed) {
-                const src = await applyOverlay(slide.feed, copy);
-                const idx = formato === "ambos" ? i * 2 + 1 : i;
-                result[idx] = {
-                  label: `Slide ${i + 1}${formato === "ambos" ? " — Feed" : ""}`,
-                  src, aspect: "1/1", copy, approved: false, saving: false,
-                };
-              }
-            }
-          )
-        );
-        setImages(result.filter(Boolean));
+        const arr: GeneratedImage[] = [];
+        (data.slides as { story?: string; feed?: string; copy: { headline: string; subtitle: string; cta: string } }[]).forEach((slide, i) => {
+          const copy = { headline: slide.copy.headline, subtitle: slide.copy.subtitle, cta: slide.copy.cta || "" };
+          if (slide.story) arr.push({ label: `Slide ${i + 1}${formato === "ambos" ? " — Story" : ""}`, src: slide.story, aspect: "9/16", copy, approved: false, saving: false });
+          if (slide.feed) arr.push({ label: `Slide ${i + 1}${formato === "ambos" ? " — Feed" : ""}`, src: slide.feed, aspect: "1/1", copy, approved: false, saving: false });
+        });
+        result = arr;
       }
-    } catch {
-      setError("Erro ao gerar. Tente novamente.");
+
+      setImages(result);
+      saveImagesToHistory(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao gerar. Tente novamente.");
     } finally {
       setGenerating(false);
     }
@@ -165,12 +141,10 @@ function GerarContent() {
     const img = images[index];
     if (img.approved || img.saving) return;
 
-    setImages((prev) =>
-      prev.map((im, i) => (i === index ? { ...im, saving: true } : im))
-    );
+    setImages((prev) => prev.map((im, i) => (i === index ? { ...im, saving: true } : im)));
 
     try {
-      await saveApprovedPost(
+      await saveToHistory(
         user.uid,
         {
           brandId: selectedBrandId,
@@ -178,17 +152,14 @@ function GerarContent() {
           tema,
           formato: img.aspect === "9/16" ? "story" : "feed",
           tipo,
-          copy: { headline: img.copy.headline, subtitle: img.copy.subtitle, cta: img.copy.cta },
+          copy: img.copy,
+          approved: true,
         },
         img.src
       );
-      setImages((prev) =>
-        prev.map((im, i) => (i === index ? { ...im, approved: true, saving: false } : im))
-      );
+      setImages((prev) => prev.map((im, i) => (i === index ? { ...im, approved: true, saving: false } : im)));
     } catch {
-      setImages((prev) =>
-        prev.map((im, i) => (i === index ? { ...im, saving: false } : im))
-      );
+      setImages((prev) => prev.map((im, i) => (i === index ? { ...im, saving: false } : im)));
     }
   }
 

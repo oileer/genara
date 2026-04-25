@@ -21,7 +21,7 @@ export interface Brand {
   copy_examples: { headline: string; subtitle: string; cta: string };
   effects: string[];
   dont: string[];
-  logo_url: string | null;
+  logo_url?: string | null;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

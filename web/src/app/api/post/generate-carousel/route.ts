@@ -100,23 +100,33 @@ async function generateSlideImage(
     }
   }
 
-  const mainPrompt = `Generate a ${ratio} photo-realistic marketing background image for a carousel slide.
+  const slideRole = slideNum === 1 ? "hook slide — must grab attention instantly"
+    : slideNum === totalSlides ? "CTA slide — drive action, clear call to action"
+    : `content slide ${slideNum} — develop the narrative`;
+
+  const mainPrompt = `Create a ${ratio} carousel slide image for a Brazilian brand. Slide ${slideNum} of ${totalSlides} — ${slideRole}.
 
 Brand: ${brand.name} — ${brand.segment}
 Visual style: ${brand.visual_style}
-Slide: ${slideNum} of ${totalSlides}
 Central visual element: ${slide.visual_description}
 
+TEXT TO RENDER IN THIS SLIDE (render exactly):
+- HEADLINE (dominant): ${slide.headline}
+- Subtitle (supporting): ${slide.subtitle}
+
 Color palette:
-- Background: ${brand.colors.background} (dominant — keep consistent across all slides)
+- Background: ${brand.colors.background} (MUST be consistent across all ${totalSlides} slides)
 - Primary accent: ${brand.colors.primary}
+- Keep the same visual identity on every slide
 
 Visual effects: ${brand.effects?.join(", ") || "cinematic dark atmosphere"}
 
-⚠️ CRITICAL RULES:
-- DO NOT render ANY text, letters, words or numbers in the image
-- Generate ONLY the background visual — text will be overlaid programmatically
-- Keep the same visual style across all slides for carousel consistency
+CREATIVE DIRECTION:
+- Slide ${slideNum} of ${totalSlides}: the typography and composition should feel like part of the same story arc
+- Break generic layouts — be bold with type scale, placement, integration with the visual
+- Slide 1: explosive, high-impact, stops the scroll
+- Middle slides: visual continuity, the reader feels progression
+- Last slide: action-oriented, energetic
 - Ultra high contrast, cinematic lighting
 - No watermarks, no borders
 - Do NOT include: ${brand.dont?.join(", ") || "low quality elements"}`;
