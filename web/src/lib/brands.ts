@@ -22,6 +22,7 @@ export interface Brand {
   effects: string[];
   dont: string[];
   logo_url?: string | null;
+  reference_images?: string[];
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -33,6 +34,18 @@ export async function uploadBrandLogo(
 ): Promise<string> {
   const ext = file.name.split(".").pop() || "png";
   const storageRef = ref(storage, `logos/${uid}/${brandId}.${ext}`);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}
+
+export async function uploadReferenceImage(
+  uid: string,
+  brandId: string,
+  file: File
+): Promise<string> {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const ext = file.name.split(".").pop() || "jpg";
+  const storageRef = ref(storage, `references/${uid}/${brandId}/${id}.${ext}`);
   await uploadBytes(storageRef, file);
   return getDownloadURL(storageRef);
 }

@@ -48,9 +48,23 @@ function GerarContent() {
 
   const selectedBrand = brands.find((b) => b.id === selectedBrandId);
 
-  async function buildApprovedExamples(): Promise<HistoryPost[]> {
-    if (!user || !selectedBrandId) return [];
-    return getApprovedForBrand(user.uid, selectedBrandId, 3);
+  async function buildApprovedExamples(): Promise<{ imageUrl: string; copy: { headline: string; subtitle: string; cta: string } }[]> {
+    const examples: { imageUrl: string; copy: { headline: string; subtitle: string; cta: string } }[] = [];
+
+    // 1. reference_images da marca (máx 3) — contexto manual do usuário
+    if (selectedBrand?.reference_images?.length) {
+      selectedBrand.reference_images.slice(-3).forEach((url) => {
+        examples.push({ imageUrl: url, copy: { headline: "", subtitle: "", cta: "" } });
+      });
+    }
+
+    // 2. posts aprovados do histórico (máx 2) — aprendizado da IA
+    if (user && selectedBrandId) {
+      const approved = await getApprovedForBrand(user.uid, selectedBrandId, 2);
+      approved.forEach((p) => examples.push({ imageUrl: p.imageUrl, copy: p.copy }));
+    }
+
+    return examples;
   }
 
   async function saveImagesToHistory(imgs: GeneratedImage[]) {

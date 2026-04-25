@@ -43,8 +43,8 @@ export default function NovaMarcaPage() {
       if (data.error) throw new Error(data.error);
       setBrand(data);
       setStep(2);
-    } catch {
-      setError("Erro ao analisar a marca. Tente novamente.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao analisar a marca. Tente novamente.");
       setStep(0);
     } finally {
       setLoading(false);
@@ -84,7 +84,7 @@ export default function NovaMarcaPage() {
             <div className="space-y-2">
               <Label>Nome da empresa</Label>
               <Input
-                placeholder="Ex: Full Contingência"
+                placeholder="Ex: Sua Empresa"
                 value={inputs.name}
                 onChange={(e) => setInputs((i) => ({ ...i, name: e.target.value }))}
                 required className="bg-zinc-900 border-zinc-800"
@@ -95,7 +95,7 @@ export default function NovaMarcaPage() {
               <div className="flex">
                 <span className="flex items-center px-3 bg-zinc-800 border border-r-0 border-zinc-700 rounded-l-md text-zinc-400 text-sm">@</span>
                 <Input
-                  placeholder="fullcontingencia"
+                  placeholder="suaempresa"
                   value={inputs.instagram}
                   onChange={(e) => setInputs((i) => ({ ...i, instagram: e.target.value }))}
                   required className="bg-zinc-900 border-zinc-800 rounded-l-none"
@@ -105,7 +105,7 @@ export default function NovaMarcaPage() {
             <div className="space-y-2">
               <Label>Site <span className="text-zinc-500 text-xs">(opcional)</span></Label>
               <Input
-                placeholder="https://fullcontingencia.com"
+                placeholder="https://suaempresa.com"
                 value={inputs.site}
                 onChange={(e) => setInputs((i) => ({ ...i, site: e.target.value }))}
                 className="bg-zinc-900 border-zinc-800"
