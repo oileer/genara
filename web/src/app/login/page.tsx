@@ -33,10 +33,14 @@ export default function LoginPage() {
     setError("");
     try {
       const user = await signInWithGoogle();
-      const userDoc = await getUserDoc(user.uid);
-      if (!userDoc?.whatsapp) {
-        router.push("/onboarding");
-      } else {
+      try {
+        const userDoc = await getUserDoc(user.uid);
+        if (!userDoc?.whatsapp) {
+          router.push("/onboarding");
+        } else {
+          router.push("/marcas");
+        }
+      } catch {
         router.push("/marcas");
       }
     } catch {
