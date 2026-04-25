@@ -41,6 +41,15 @@ export async function signInWithGoogle(whatsapp?: string) {
   return user;
 }
 
+export async function getUserDoc(uid: string) {
+  const snap = await getDoc(doc(db, "users", uid));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function updateUserDoc(uid: string, data: Record<string, unknown>) {
+  await setDoc(doc(db, "users", uid), data, { merge: true });
+}
+
 export async function logout() {
   await signOut(auth);
 }

@@ -34,6 +34,11 @@ function GerarContent() {
   const [generating, setGenerating] = useState(false);
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [error, setError] = useState("");
+  const [direcaoVisual, setDirecaoVisual] = useState("");
+  const [modalTema, setModalTema] = useState("");
+  const [editModal, setEditModal] = useState<{ index: number; src: string } | null>(null);
+  const [editInstruction, setEditInstruction] = useState("");
+  const [editing, setEditing] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -101,7 +106,7 @@ function GerarContent() {
         const resp = await fetch("/api/post/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brand: selectedBrand, tema, formato, approvedExamples }),
+          body: JSON.stringify({ brand: selectedBrand, tema, formato, approvedExamples, direcaoVisual }),
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
@@ -127,7 +132,7 @@ function GerarContent() {
         const resp = await fetch("/api/post/generate-carousel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brand: selectedBrand, tema, formato, numSlides, approvedExamples }),
+          body: JSON.stringify({ brand: selectedBrand, tema, formato, numSlides, approvedExamples, direcaoVisual }),
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
@@ -177,16 +182,21 @@ function GerarContent() {
     }
   }
 
-  async function handleSuggest() {
+  async function handleSuggest(temaOverride?: string) {
     if (!selectedBrand) return;
     setLoadingSuggest(true);
     setShowSuggest(true);
     setSuggestions([]);
+    const temaParaUsar = temaOverride ?? modalTema ?? tema;
     try {
       const resp = await fetch("/api/post/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand: selectedBrand, tema }),
+        body: JSON.stringify({
+          brand: selectedBrand,
+          tema: temaParaUsar,
+          referenceImages: selectedBrand?.reference_images || [],
+        }),
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
@@ -196,6 +206,34 @@ function GerarContent() {
       setShowSuggest(false);
     } finally {
       setLoadingSuggest(false);
+    }
+  }
+
+  function handleOpenSuggest() {
+    setModalTema(tema);
+    handleSuggest(tema);
+  }
+
+  async function handleEdit() {
+    if (!editModal || !editInstruction.trim()) return;
+    setEditing(true);
+    try {
+      const resp = await fetch("/api/post/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: editModal.src, instruction: editInstruction }),
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      setImages((prev) => prev.map((img, i) =>
+        i === editModal.index ? { ...img, src: data.image, approved: false, historyId: undefined } : img
+      ));
+      setEditModal(null);
+      setEditInstruction("");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao editar.");
+    } finally {
+      setEditing(false);
     }
   }
 
@@ -281,7 +319,7 @@ function GerarContent() {
                   className="bg-zinc-900 border-zinc-800 flex-1"
                   onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
                 />
-                <button type="button" onClick={handleSuggest}
+                <button type="button" onClick={handleOpenSuggest}
                   disabled={!selectedBrandId || loadingSuggest}
                   className="px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                 >
@@ -324,7 +362,18 @@ function GerarContent() {
               </div>
             )}
 
-            {error && <p className="text-red-400 text-sm">{error}</p>}
+              {/* Direção visual */}
+            <div className="space-y-2">
+              <Label>Direção visual <span className="text-zinc-600 font-normal">(opcional)</span></Label>
+              <Input
+                placeholder="Ex: quero um hacker ao fundo, use ícone do WhatsApp, fundo vermelho..."
+                value={direcaoVisual}
+                onChange={(e) => setDirecaoVisual(e.target.value)}
+                className="bg-zinc-900 border-zinc-800 text-sm"
+              />
+            </div>
+
+          {error && <p className="text-red-400 text-sm">{error}</p>}
 
             <Button onClick={handleGenerate} disabled={generating || !selectedBrandId || !tema}
               className="w-full bg-green-400 text-black hover:bg-green-300 font-semibold h-12 text-base"
@@ -366,6 +415,13 @@ function GerarContent() {
                           ↓ Baixar
                         </button>
                         <button
+                          onClick={() => { setEditModal({ index: i, src: img.src }); setEditInstruction(""); }}
+                          className="px-3 py-1.5 text-xs rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700 transition-colors"
+                          title="Editar com IA"
+                        >
+                          ✎
+                        </button>
+                        <button
                           onClick={() => handleApprove(i)}
                           disabled={img.approved || img.saving}
                           className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
@@ -402,6 +458,44 @@ function GerarContent() {
         </div>
       </div>
 
+      {/* Modal de edição */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4" onClick={() => !editing && setEditModal(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-white font-semibold">Editar com IA</h2>
+              <button onClick={() => !editing && setEditModal(null)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className={`mx-auto rounded-lg overflow-hidden bg-zinc-800 ${
+              images[editModal.index]?.aspect === "9/16"
+                ? "w-48 aspect-[9/16]"
+                : "w-full aspect-square"
+            }`}>
+              <img src={editModal.src} alt="preview" className="w-full h-full object-cover" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-zinc-400 text-xs">Descreva o que quer mudar na imagem:</p>
+              <textarea
+                value={editInstruction}
+                onChange={(e) => setEditInstruction(e.target.value)}
+                placeholder="Ex: mude o fundo para vermelho, troque o objeto por um ícone do Facebook, deixe o texto maior..."
+                rows={3}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-green-400 resize-none"
+              />
+            </div>
+            <button
+              onClick={handleEdit}
+              disabled={editing || !editInstruction.trim()}
+              className="w-full py-3 bg-green-400 hover:bg-green-300 text-black font-semibold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {editing ? (
+                <><span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" /> Editando...</>
+              ) : "Aplicar edição →"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modal de sugestões */}
       {showSuggest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setShowSuggest(false)}>
@@ -409,6 +503,23 @@ function GerarContent() {
             <div className="flex items-center justify-between">
               <h2 className="text-white font-semibold">Ideias para {selectedBrand?.name}</h2>
               <button onClick={() => setShowSuggest(false)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Digite um tema ou deixe vazio para ideias gerais..."
+                value={modalTema}
+                onChange={(e) => setModalTema(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSuggest()}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-green-400"
+              />
+              <button
+                onClick={() => handleSuggest()}
+                disabled={loadingSuggest}
+                className="px-3 py-2 bg-green-400 hover:bg-green-300 text-black text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+              >
+                Gerar
+              </button>
             </div>
             {loadingSuggest ? (
               <div className="flex items-center justify-center py-8">
@@ -424,11 +535,6 @@ function GerarContent() {
                   </button>
                 ))}
               </div>
-            )}
-            {!loadingSuggest && suggestions.length > 0 && (
-              <button onClick={handleSuggest} className="w-full text-center text-zinc-500 hover:text-zinc-300 text-sm py-1 transition-colors">
-                ↻ Gerar novas ideias
-              </button>
             )}
           </div>
         </div>

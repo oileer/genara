@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = "gemini-2.5-flash";
+const TEXT_MODEL = "gemini-2.5-flash";
+
+async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const buffer = await resp.arrayBuffer();
+    const mimeType = resp.headers.get("content-type") || "image/jpeg";
+    const data = Buffer.from(buffer).toString("base64");
+    return { data, mimeType };
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
-  const { brand, tema } = await req.json();
+  const { brand, tema, referenceImages } = await req.json();
 
   if (!brand) {
     return NextResponse.json({ error: "Marca obrigatória." }, { status: 400 });
@@ -14,7 +27,7 @@ export async function POST(req: NextRequest) {
     ? `O usuário começou a digitar: "${tema}". Gere 5 variações ou expansões desse tema.`
     : `O usuário não digitou nada. Gere 5 ideias de tema originais baseadas no contexto da marca.`;
 
-  const prompt = `
+  const textPrompt = `
 Você é um especialista em marketing digital brasileiro.
 Sugira exatamente 5 ideias de tema para um post de redes sociais para a marca abaixo.
 
@@ -24,6 +37,8 @@ Tom de voz: ${brand.tone}
 Estilo visual: ${brand.visual_style}
 
 ${context}
+
+${(referenceImages?.length) ? `As imagens acima são referências visuais da marca — use o estilo, ambiente e mensagem delas para inspirar os temas.` : ""}
 
 Regras:
 - Cada tema deve ser curto (máximo 8 palavras), direto e impactante
@@ -36,13 +51,29 @@ Retorne APENAS um JSON array com 5 strings, sem markdown:
 `.trim();
 
   try {
+    // Monta parts: imagens de referência + texto
+    const parts: unknown[] = [];
+
+    if (referenceImages?.length) {
+      const imageResults = await Promise.all(
+        (referenceImages as string[]).slice(0, 4).map(fetchImageAsBase64)
+      );
+      for (const img of imageResults) {
+        if (img) {
+          parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        }
+      }
+    }
+
+    parts.push({ text: textPrompt });
+
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts }],
           generationConfig: { responseMimeType: "application/json" },
         }),
       }
@@ -53,8 +84,8 @@ Retorne APENAS um JSON array com 5 strings, sem markdown:
       throw new Error(`Gemini API error: ${resp.status} ${errData?.error?.message || resp.statusText}`);
     }
     const data = await resp.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const text = parts.find((p: { text?: string }) => p.text)?.text;
+    const resParts = data?.candidates?.[0]?.content?.parts || [];
+    const text = resParts.find((p: { text?: string }) => p.text)?.text;
 
     if (!text) throw new Error("Sem resposta da IA");
 
