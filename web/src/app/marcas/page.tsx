@@ -18,7 +18,7 @@ export default function MarcasPage() {
 
   useEffect(() => {
     if (user) {
-      getBrands(user.uid).then((b) => { setBrands(b); setFetching(false); });
+      getBrands(user.uid).then((b) => { setBrands(b); }).catch(() => {}).finally(() => setFetching(false));
     }
   }, [user]);
 

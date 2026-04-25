@@ -29,7 +29,7 @@ export default function EditarMarcaPage() {
         const found = brands.find((b) => b.id === brandId);
         if (found) setBrand(found);
         else router.replace("/marcas");
-      });
+      }).catch(() => router.replace("/marcas"));
     }
   }, [user, brandId, router]);
 
@@ -61,8 +61,9 @@ export default function EditarMarcaPage() {
       const updated = [...(brand.reference_images || []), ...urls].slice(-8);
       setBrand((b) => b ? { ...b, reference_images: updated } : b);
       await updateBrand(user.uid, brandId, { reference_images: updated });
-    } catch {
-      setError("Erro ao fazer upload das imagens.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(`Erro ao fazer upload: ${msg}`);
     } finally {
       setUploading(false);
       e.target.value = "";
