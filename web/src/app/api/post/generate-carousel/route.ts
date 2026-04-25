@@ -20,6 +20,12 @@ interface Brand {
   visual_style: string;
   colors: { background: string; primary: string; text: string; secondary: string };
   dont: string[];
+  effects: string[];
+}
+
+interface ApprovedExample {
+  imageUrl: string;
+  copy: { headline: string; subtitle: string; cta: string };
 }
 
 async function generateCarouselScript(brand: Brand, tema: string, numSlides: number): Promise<SlideScript[]> {
@@ -33,18 +39,18 @@ Tema: ${tema}
 
 Regras:
 - Slide 1: gancho forte que prenda atenção imediatamente
-- Slides 2 a ${numSlides - 1}: desenvolvimento do tema (dicas, argumentos, dados)
+- Slides 2 a ${numSlides - 1}: desenvolvimento (dicas, argumentos, dados)
 - Slide ${numSlides}: CTA claro e direto
-- Headline: CAIXA ALTA, máx 6 palavras, com acentuação correta (ã, ê, ç, etc.)
-- Subtitle: caixa baixa, máx 8 palavras, com acentuação correta
-- visual_description: descrição em INGLÊS do elemento visual central do slide
+- Headline: CAIXA ALTA, máx 6 palavras, acentuação correta (ã, ê, ç, etc.)
+- Subtitle: caixa baixa, máx 8 palavras, acentuação correta
+- visual_description: descreva em INGLÊS o elemento visual central do slide (para geração de imagem)
 
 Retorne APENAS um JSON array (sem markdown):
 [
   {
     "headline": "HEADLINE DO SLIDE",
     "subtitle": "subtítulo do slide",
-    "visual_description": "english description of the central visual element"
+    "visual_description": "english description of central visual element"
   }
 ]`;
 
@@ -62,8 +68,14 @@ Retorne APENAS um JSON array (sem markdown):
 
   const data = await resp.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Erro ao gerar roteiro do carrossel");
+  if (!text) throw new Error("Erro ao gerar roteiro");
   return JSON.parse(text) as SlideScript[];
+}
+
+async function fetchImageBase64(url: string): Promise<string> {
+  const resp = await fetch(url);
+  const buffer = await resp.arrayBuffer();
+  return Buffer.from(buffer).toString("base64");
 }
 
 async function generateSlideImage(
@@ -71,40 +83,45 @@ async function generateSlideImage(
   slide: SlideScript,
   slideNum: number,
   totalSlides: number,
-  ratio: "9:16 vertical" | "1:1 square"
+  ratio: "9:16 vertical" | "1:1 square",
+  approvedExamples: ApprovedExample[]
 ): Promise<string> {
-  const prompt = `Dark cinematic photo-realistic ${ratio} marketing carousel slide for Brazilian social media.
+  const exampleParts: unknown[] = [];
+
+  if (approvedExamples.length > 0) {
+    exampleParts.push({
+      text: `These are approved posts for this brand. Replicate their visual style and aesthetic quality:`,
+    });
+    for (const ex of approvedExamples) {
+      try {
+        const b64 = await fetchImageBase64(ex.imageUrl);
+        exampleParts.push({ inlineData: { mimeType: "image/png", data: b64 } });
+      } catch { /* skip */ }
+    }
+  }
+
+  const mainPrompt = `Generate a ${ratio} photo-realistic marketing background image for a carousel slide.
 
 Brand: ${brand.name} — ${brand.segment}
 Visual style: ${brand.visual_style}
 Slide: ${slideNum} of ${totalSlides}
-
-Color palette:
-- Background: ${brand.colors.background} (dominant)
-- Primary accent: ${brand.colors.primary} (glows, highlights)
-- Text color: ${brand.colors.text}
-
 Central visual element: ${slide.visual_description}
 
-RENDER THESE EXACT TEXTS ON THE IMAGE (character by character, correct Portuguese accents):
-${JSON.stringify({
-  headline: slide.headline,
-  subtitle: slide.subtitle,
-  slide_indicator: `${slideNum}/${totalSlides}`,
-  handle: "@" + brand.handle,
-}, null, 2)}
+Color palette:
+- Background: ${brand.colors.background} (dominant — keep consistent across all slides)
+- Primary accent: ${brand.colors.primary}
 
-Text placement:
-- headline: large bold uppercase, bottom third
-- subtitle: smaller, below headline
-- slide_indicator: small, top or bottom corner
-- handle: small, opposite corner
+Visual effects: ${brand.effects?.join(", ") || "cinematic dark atmosphere"}
 
-Rules:
+⚠️ CRITICAL RULES:
+- DO NOT render ANY text, letters, words or numbers in the image
+- Generate ONLY the background visual — text will be overlaid programmatically
+- Keep the same visual style across all slides for carousel consistency
 - Ultra high contrast, cinematic lighting
-- Consistent visual style across all slides of this carousel
 - No watermarks, no borders
 - Do NOT include: ${brand.dont?.join(", ") || "low quality elements"}`;
+
+  const parts = [...exampleParts, { text: mainPrompt }];
 
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
@@ -112,7 +129,7 @@ Rules:
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts }],
         generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
       }),
     }
@@ -124,34 +141,38 @@ Rules:
   }
 
   const data = await resp.json();
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const imgPart = parts.find((p: { inlineData?: { data: string } }) => p.inlineData);
+  const resParts = data?.candidates?.[0]?.content?.parts || [];
+  const imgPart = resParts.find((p: { inlineData?: { data: string } }) => p.inlineData);
   if (!imgPart) throw new Error(`Slide ${slideNum}: nenhuma imagem gerada`);
   return `data:image/png;base64,${imgPart.inlineData.data}`;
 }
 
 export async function POST(req: NextRequest) {
-  const { brand, tema, formato, numSlides = 3 } = await req.json();
+  const { brand, tema, formato, numSlides = 3, approvedExamples = [] } = await req.json();
 
   if (!brand || !tema) {
     return NextResponse.json({ error: "Marca e tema são obrigatórios." }, { status: 400 });
   }
 
   try {
-    const script = await generateCarouselScript(brand, tema, Math.min(Math.max(numSlides, 3), 5));
+    const n = Math.min(Math.max(numSlides, 3), 5);
+    const script = await generateCarouselScript(brand, tema, n);
 
     const slides = await Promise.all(
       script.map(async (slide, i) => {
         if (formato === "ambos") {
           const [story, feed] = await Promise.all([
-            generateSlideImage(brand, slide, i + 1, script.length, "9:16 vertical"),
-            generateSlideImage(brand, slide, i + 1, script.length, "1:1 square"),
+            generateSlideImage(brand, slide, i + 1, script.length, "9:16 vertical", approvedExamples),
+            generateSlideImage(brand, slide, i + 1, script.length, "1:1 square", approvedExamples),
           ]);
-          return { story, feed };
+          return { story, feed, copy: { headline: slide.headline, subtitle: slide.subtitle, cta: "" } };
         }
         const ratio = formato === "feed" ? "1:1 square" : "9:16 vertical";
-        const image = await generateSlideImage(brand, slide, i + 1, script.length, ratio);
-        return formato === "feed" ? { feed: image } : { story: image };
+        const image = await generateSlideImage(brand, slide, i + 1, script.length, ratio, approvedExamples);
+        return {
+          ...(formato === "feed" ? { feed: image } : { story: image }),
+          copy: { headline: slide.headline, subtitle: slide.subtitle, cta: "" },
+        };
       })
     );
 
