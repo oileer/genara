@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getBrands, updateBrand, uploadReferenceImage, Brand } from "@/lib/brands";
+import { createInvite, getBrandInvites, Invite } from "@/lib/invites";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,11 @@ export default function EditarMarcaPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const isOwner = brand?.ownerId === user?.uid || !brand?.ownerId;
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -27,8 +33,12 @@ export default function EditarMarcaPage() {
     if (user) {
       getBrands(user.uid).then((brands) => {
         const found = brands.find((b) => b.id === brandId);
-        if (found) setBrand(found);
-        else router.replace("/marcas");
+        if (found) {
+          setBrand(found);
+          if (found.ownerId === user.uid || !found.ownerId) {
+            getBrandInvites(user.uid, brandId).then(setInvites).catch(() => {});
+          }
+        } else router.replace("/marcas");
       }).catch(() => router.replace("/marcas"));
     }
   }, [user, brandId, router]);
@@ -67,6 +77,22 @@ export default function EditarMarcaPage() {
     } finally {
       setUploading(false);
       e.target.value = "";
+    }
+  }
+
+  async function handleCreateInvite() {
+    if (!user || !brand || !inviteEmail.trim()) return;
+    setInviting(true);
+    try {
+      const code = await createInvite(user.uid, user.displayName || user.email || "Usuário", brandId, brand.name, inviteEmail.trim());
+      const link = `${window.location.origin}/convite/${code}`;
+      setInviteLink(link);
+      setInviteEmail("");
+      getBrandInvites(user.uid, brandId).then(setInvites).catch(() => {});
+    } catch {
+      setError("Erro ao criar convite.");
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -183,6 +209,57 @@ export default function EditarMarcaPage() {
             />
           </label>
         </div>
+
+        {/* Colaboradores — só dono vê */}
+        {isOwner && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-white font-semibold text-sm uppercase tracking-wider">Colaboradores</h2>
+              <p className="text-zinc-500 text-xs mt-1">Gere um link de convite para dar acesso a essa marca.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                placeholder="Email do colaborador (opcional)"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="bg-zinc-900 border-zinc-800 flex-1 text-sm"
+              />
+              <Button onClick={handleCreateInvite} disabled={inviting} className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 whitespace-nowrap">
+                {inviting ? "..." : "Gerar convite"}
+              </Button>
+            </div>
+
+            {inviteLink && (
+              <div className="bg-zinc-900 border border-green-400/30 rounded-lg p-3 space-y-2">
+                <p className="text-green-400 text-xs font-semibold">Link gerado — compartilhe com o colaborador:</p>
+                <div className="flex gap-2 items-center">
+                  <p className="text-zinc-300 text-xs break-all flex-1">{inviteLink}</p>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(inviteLink); }}
+                    className="text-xs px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded transition-colors whitespace-nowrap"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {invites.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-zinc-500 text-xs">Convites enviados:</p>
+                {invites.map((inv) => (
+                  <div key={inv.id} className="flex items-center justify-between text-xs px-3 py-2 bg-zinc-900 rounded-lg border border-zinc-800">
+                    <span className="text-zinc-400">{inv.email || "Sem email"}</span>
+                    <span className={`px-2 py-0.5 rounded-full ${inv.status === "accepted" ? "bg-green-400/20 text-green-400" : "bg-zinc-700 text-zinc-400"}`}>
+                      {inv.status === "accepted" ? "✓ Aceito" : "Pendente"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {error && <p className="text-red-400 text-sm">{error}</p>}
 

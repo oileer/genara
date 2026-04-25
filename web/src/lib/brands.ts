@@ -4,6 +4,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   doc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -12,6 +13,7 @@ import { db, storage } from "./firebase";
 
 export interface Brand {
   id?: string;
+  ownerId?: string;
   name: string;
   handle: string;
   segment: string;
@@ -51,8 +53,25 @@ export async function uploadReferenceImage(
 }
 
 export async function getBrands(uid: string): Promise<Brand[]> {
-  const snap = await getDocs(collection(db, "brands", uid, "list"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Brand));
+  const ownSnap = await getDocs(collection(db, "brands", uid, "list"));
+  const ownBrands = ownSnap.docs.map((d) => ({ id: d.id, ownerId: uid, ...d.data() } as Brand));
+
+  // Busca marcas compartilhadas
+  try {
+    const accessSnap = await getDocs(collection(db, "user_access", uid, "brands"));
+    const sharedBrands = await Promise.all(
+      accessSnap.docs.map(async (accessDoc) => {
+        const { ownerId, brandId } = accessDoc.data();
+        const brandSnap = await getDoc(doc(db, "brands", ownerId, "list", brandId));
+        if (!brandSnap.exists()) return null;
+        return { id: brandSnap.id, ownerId, ...brandSnap.data() } as Brand;
+      })
+    );
+    const validShared = sharedBrands.filter(Boolean) as Brand[];
+    return [...ownBrands, ...validShared];
+  } catch {
+    return ownBrands;
+  }
 }
 
 export async function createBrand(uid: string, brand: Omit<Brand, "id">): Promise<string> {
