@@ -3,10 +3,13 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { getBrands, Brand } from "@/lib/brands";
-import { savePost } from "@/lib/posts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+type Tipo = "post" | "carrossel";
+type Formato = "story" | "feed" | "ambos";
+type GeneratedImage = { label: string; src: string; aspect: "9/16" | "1/1" };
 
 function GerarContent() {
   const { user, loading } = useAuth();
@@ -15,10 +18,11 @@ function GerarContent() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState(params.get("brandId") || "");
   const [tema, setTema] = useState("");
-  const [formato, setFormato] = useState<"story" | "feed">("story");
+  const [tipo, setTipo] = useState<Tipo>("post");
+  const [formato, setFormato] = useState<Formato>("story");
+  const [numSlides, setNumSlides] = useState(3);
   const [generating, setGenerating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [image, setImage] = useState<string | null>(null);
+  const [images, setImages] = useState<GeneratedImage[]>([]);
   const [error, setError] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loadingSuggest, setLoadingSuggest] = useState(false);
@@ -38,18 +42,48 @@ function GerarContent() {
     if (!selectedBrand || !tema) return;
     setGenerating(true);
     setError("");
-    setImage(null);
+    setImages([]);
+
     try {
-      const resp = await fetch("/api/post/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand: selectedBrand, tema, formato }),
-      });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error);
-      setImage(data.image);
+      if (tipo === "post") {
+        const resp = await fetch("/api/post/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brand: selectedBrand, tema, formato }),
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        if (formato === "ambos") {
+          setImages([
+            { label: "Story (9:16)", src: data.images.story, aspect: "9/16" },
+            { label: "Feed (1:1)", src: data.images.feed, aspect: "1/1" },
+          ]);
+        } else {
+          setImages([{
+            label: formato === "story" ? "Story (9:16)" : "Feed (1:1)",
+            src: data.image,
+            aspect: formato === "story" ? "9/16" : "1/1",
+          }]);
+        }
+      } else {
+        const resp = await fetch("/api/post/generate-carousel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brand: selectedBrand, tema, formato, numSlides }),
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        const result: GeneratedImage[] = [];
+        (data.slides as { story?: string; feed?: string }[]).forEach((slide, i) => {
+          if (slide.story) result.push({ label: `Slide ${i + 1} — Story`, src: slide.story, aspect: "9/16" });
+          if (slide.feed) result.push({ label: `Slide ${i + 1} — Feed`, src: slide.feed, aspect: "1/1" });
+        });
+        setImages(result);
+      }
     } catch {
-      setError("Erro ao gerar imagem. Tente novamente.");
+      setError("Erro ao gerar. Tente novamente.");
     } finally {
       setGenerating(false);
     }
@@ -77,31 +111,17 @@ function GerarContent() {
     }
   }
 
-  async function handleSave() {
-    if (!user || !image || !selectedBrand) return;
-    setSaving(true);
-    try {
-      await savePost(user.uid, {
-        brandId: selectedBrandId,
-        brandName: selectedBrand.name,
-        tema,
-        formato,
-        imageUrl: "",
-      }, image);
-      router.push("/historico");
-    } catch {
-      setError("Erro ao salvar.");
-    } finally {
-      setSaving(false);
-    }
+  function handleDownload(src: string, label: string) {
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = `genara-${label.replace(/[\s/()]/g, "-")}-${Date.now()}.png`;
+    a.click();
   }
 
-  function handleDownload() {
-    if (!image) return;
-    const a = document.createElement("a");
-    a.href = image;
-    a.download = `genara-${Date.now()}.png`;
-    a.click();
+  function handleDownloadAll() {
+    images.forEach((img, i) => {
+      setTimeout(() => handleDownload(img.src, img.label), i * 400);
+    });
   }
 
   if (loading) return (
@@ -110,9 +130,14 @@ function GerarContent() {
     </div>
   );
 
+  const isMulti = images.length > 1;
+  const loadingMsg = tipo === "carrossel"
+    ? `Gerando roteiro + ${numSlides} slides${formato === "ambos" ? " × 2 formatos" : ""}... (pode levar ~1 min)`
+    : formato === "ambos" ? "Gerando Story e Feed..." : "Gerando...";
+
   return (
     <div className="min-h-screen bg-black px-4 py-10">
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Navbar */}
         <div className="flex items-center justify-between">
@@ -125,13 +150,32 @@ function GerarContent() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
 
-          {/* Painel esquerdo — controles */}
-          <div className="space-y-6">
-            <h1 className="text-xl font-semibold text-white">Gerar post</h1>
+          {/* Painel esquerdo */}
+          <div className="space-y-5">
 
-            {/* Seletor de marca */}
+            {/* Tipo */}
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <div className="flex gap-2">
+                {(["post", "carrossel"] as Tipo[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTipo(t)}
+                    className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors capitalize ${
+                      tipo === t
+                        ? "border-green-400 bg-green-400/10 text-green-400"
+                        : "border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                    }`}
+                  >
+                    {t === "post" ? "Post único" : "Carrossel"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Marca */}
             <div className="space-y-2">
               <Label>Marca</Label>
               <select
@@ -162,7 +206,6 @@ function GerarContent() {
                   onClick={handleSuggest}
                   disabled={!selectedBrandId || loadingSuggest}
                   className="px-3 py-2 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                  title="Sugerir ideias"
                 >
                   {loadingSuggest ? (
                     <span className="w-4 h-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin inline-block" />
@@ -174,22 +217,44 @@ function GerarContent() {
             {/* Formato */}
             <div className="space-y-2">
               <Label>Formato</Label>
-              <div className="flex gap-3">
-                {(["story", "feed"] as const).map((f) => (
+              <div className="flex gap-2">
+                {([
+                  { value: "story", label: "Story (9:16)" },
+                  { value: "feed", label: "Feed (1:1)" },
+                  { value: "ambos", label: "Ambos" },
+                ] as { value: Formato; label: string }[]).map((f) => (
                   <button
-                    key={f}
-                    onClick={() => setFormato(f)}
-                    className={`flex-1 py-3 rounded-lg border text-sm font-medium transition-colors ${
-                      formato === f
+                    key={f.value}
+                    onClick={() => setFormato(f.value)}
+                    className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                      formato === f.value
                         ? "border-green-400 bg-green-400/10 text-green-400"
                         : "border-zinc-800 text-zinc-400 hover:border-zinc-700"
                     }`}
                   >
-                    {f === "story" ? "Story / Reels (9:16)" : "Feed (1:1)"}
+                    {f.label}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Nº de slides (só carrossel) */}
+            {tipo === "carrossel" && (
+              <div className="space-y-2">
+                <Label>Slides: <span className="text-green-400 font-semibold">{numSlides}</span></Label>
+                <input
+                  type="range"
+                  min={3}
+                  max={5}
+                  value={numSlides}
+                  onChange={(e) => setNumSlides(Number(e.target.value))}
+                  className="w-full accent-green-400"
+                />
+                <div className="flex justify-between text-zinc-600 text-xs">
+                  <span>3</span><span>4</span><span>5</span>
+                </div>
+              </div>
+            )}
 
             {error && <p className="text-red-400 text-sm">{error}</p>}
 
@@ -203,86 +268,96 @@ function GerarContent() {
                   <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                   Gerando...
                 </span>
-              ) : "Gerar post →"}
+              ) : tipo === "carrossel" ? `Gerar carrossel (${numSlides} slides) →` : "Gerar post →"}
             </Button>
           </div>
 
           {/* Painel direito — preview */}
           <div className="space-y-4">
-            <div className={`bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex items-center justify-center ${formato === "story" ? "aspect-[9/16]" : "aspect-square"}`}>
-              {image ? (
-                <img src={image} alt="Post gerado" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center space-y-2 p-8">
-                  {generating ? (
-                    <>
-                      <div className="w-10 h-10 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto" />
-                      <p className="text-zinc-500 text-sm">Gerando sua imagem...</p>
-                    </>
-                  ) : (
-                    <p className="text-zinc-600 text-sm">O post aparece aqui</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {image && (
-              <div className="flex gap-3">
-                <Button onClick={handleDownload} className="flex-1 bg-green-400 text-black hover:bg-green-300 font-semibold">
-                  Baixar PNG
-                </Button>
-                <Button onClick={handleGenerate} disabled={generating} variant="outline" className="flex-1 border-zinc-800 text-zinc-400 hover:text-white">
-                  Gerar novamente
-                </Button>
-                <Button onClick={handleSave} disabled={saving} variant="outline" className="border-zinc-800 text-zinc-400 hover:text-white">
-                  {saving ? "..." : "Salvar"}
-                </Button>
+            {generating ? (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col items-center justify-center py-20 gap-4">
+                <div className="w-10 h-10 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                <p className="text-zinc-400 text-sm text-center px-4">{loadingMsg}</p>
               </div>
+            ) : images.length === 0 ? (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center py-20">
+                <p className="text-zinc-600 text-sm">Os posts aparecem aqui</p>
+              </div>
+            ) : (
+              <>
+                <div className={`grid gap-3 ${isMulti ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {images.map((img, i) => (
+                    <div key={i} className="space-y-2">
+                      <p className="text-zinc-500 text-xs">{img.label}</p>
+                      <div className={`relative overflow-hidden rounded-lg bg-zinc-900 ${img.aspect === "9/16" ? "aspect-[9/16]" : "aspect-square"}`}>
+                        <img src={img.src} alt={img.label} className="w-full h-full object-cover" />
+                      </div>
+                      <button
+                        onClick={() => handleDownload(img.src, img.label)}
+                        className="w-full py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-md transition-colors"
+                      >
+                        ↓ Baixar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  {isMulti && (
+                    <Button onClick={handleDownloadAll} className="flex-1 bg-green-400 text-black hover:bg-green-300 font-semibold">
+                      ↓ Baixar todos ({images.length})
+                    </Button>
+                  )}
+                  <Button onClick={handleGenerate} disabled={generating} variant="outline" className={`border-zinc-800 text-zinc-400 hover:text-white ${isMulti ? "" : "flex-1"}`}>
+                    ↻ Gerar novamente
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         </div>
       </div>
 
-        {/* Modal de sugestões */}
-        {showSuggest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setShowSuggest(false)}>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
-                <h2 className="text-white font-semibold">
-                  Ideias para {selectedBrand?.name}
-                </h2>
-                <button onClick={() => setShowSuggest(false)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
-              </div>
-
-              {loadingSuggest ? (
-                <div className="flex items-center justify-center py-8">
-                  <span className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={`${i}-${s}`}
-                      onClick={() => { setTema(s); setShowSuggest(false); }}
-                      className="text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-green-400/10 hover:border-green-400 border border-zinc-700 text-zinc-200 hover:text-white text-sm transition-colors"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {!loadingSuggest && suggestions.length > 0 && (
-                <button
-                  onClick={handleSuggest}
-                  className="w-full text-center text-zinc-500 hover:text-zinc-300 text-sm py-1 transition-colors"
-                >
-                  ↻ Gerar novas ideias
-                </button>
-              )}
+      {/* Modal de sugestões */}
+      {showSuggest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setShowSuggest(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-white font-semibold">
+                Ideias para {selectedBrand?.name}
+              </h2>
+              <button onClick={() => setShowSuggest(false)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
             </div>
+
+            {loadingSuggest ? (
+              <div className="flex items-center justify-center py-8">
+                <span className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={`${i}-${s}`}
+                    onClick={() => { setTema(s); setShowSuggest(false); }}
+                    className="text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-green-400/10 hover:border-green-400 border border-zinc-700 text-zinc-200 hover:text-white text-sm transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!loadingSuggest && suggestions.length > 0 && (
+              <button
+                onClick={handleSuggest}
+                className="w-full text-center text-zinc-500 hover:text-zinc-300 text-sm py-1 transition-colors"
+              >
+                ↻ Gerar novas ideias
+              </button>
+            )}
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 }
