@@ -68,8 +68,8 @@ export async function acceptInvite(inviteId: string, invite: Invite, uid: string
   // Marca convite como aceito
   await updateDoc(doc(db, "invitations", inviteId), { status: "accepted" });
 
-  // Adiciona referência de acesso para o usuário
-  await setDoc(doc(collection(db, "user_access", uid, "brands")), {
+  // Adiciona referência de acesso para o usuário (usando brandId como ID do doc)
+  await setDoc(doc(db, "user_access", uid, "brands", invite.brandId), {
     ownerId: invite.ownerId,
     brandId: invite.brandId,
     brandName: invite.brandName,
