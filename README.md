@@ -1,100 +1,135 @@
 # Genara
 
-**Gerador de posts com IA para marcas brasileiras.**
+Plataforma web para geração de posts e carrosséis de Instagram com IA, voltada para marcas brasileiras.
 
-Você passa o contexto da marca e o tema — Genara gera o post pronto pra postar. Grátis, open source, sem dependência de ferramentas pagas.
+O usuário cadastra a identidade visual da sua marca (cores, tom de voz, estilo), digita um tema e o Genara gera o post pronto — Story, Feed ou Carrossel — usando o modelo de imagem do Google Gemini.
 
-## Como funciona
+**Demo:** [genara.vercel.app](https://genara.vercel.app)
 
-```bash
-genara --brand brands/full_contingencia.json --tema "conta bloqueada no Facebook" --formato story
-```
+---
 
-Genara lê o `brand.json` da sua marca, monta o prompt com identidade visual e tom de voz, e gera a imagem via Gemini API (Google AI Studio — grátis).
+## Funcionalidades
 
-## Instalação
+- **Post único** — gera Story (9:16), Feed (1:1) ou os dois formatos ao mesmo tempo
+- **Carrossel** — gera de 3 a 5 slides com roteiro e identidade visual consistentes
+- **Ideias com IA** — sugere temas de post baseados no perfil da marca
+- **Editar com IA** — refina qualquer imagem gerada com uma instrução em texto
+- **Histórico** — salva todos os posts gerados por marca
+- **Aprovação** — marque os melhores posts para a IA aprender com eles nas próximas gerações
+- **Autenticação** — login com e-mail/senha ou Google (Firebase Auth)
+- **Multi-marca** — gerencie quantas marcas quiser na mesma conta
+- **Convites** — sistema de onboarding por código de convite
+
+---
+
+## Stack
+
+| Camada | Tecnologia |
+|--------|------------|
+| Frontend | Next.js 15 + React + TypeScript |
+| Estilo | Tailwind CSS + shadcn/ui |
+| Auth | Firebase Authentication |
+| Banco | Firestore (Firebase) |
+| Storage | Firebase Storage |
+| IA | Google Gemini (geração e edição de imagens) |
+| Deploy | Vercel |
+
+---
+
+## Como rodar localmente
+
+### Pré-requisitos
+
+- Node.js 18+
+- Conta no [Firebase](https://console.firebase.google.com) (grátis)
+- API Key do [Google AI Studio](https://aistudio.google.com) (grátis)
+
+### Instalação
 
 ```bash
 git clone https://github.com/oileer/genara.git
-cd genara
+cd genara/web
+npm install
+```
+
+### Variáveis de ambiente
+
+Crie o arquivo `web/.env.local` com base no `.env.example`:
+
+```bash
+cp .env.example .env.local
+```
+
+Preencha com suas chaves:
+
+```env
+# Firebase — pegue no console do seu projeto Firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+
+# Google AI Studio — aistudio.google.com (grátis)
+GEMINI_API_KEY=
+```
+
+### Rodar
+
+```bash
+npm run dev
+```
+
+Acesse [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Estrutura do projeto
+
+```
+genara/
+├── genara/              # CLI Python (geração local, sem interface)
+│   ├── core.py          # lógica de geração via Gemini API
+│   └── brands/          # exemplos de brand.json
+├── web/                 # aplicação Next.js (interface web)
+│   ├── src/
+│   │   ├── app/         # rotas (App Router)
+│   │   │   ├── gerar/       # página principal de geração
+│   │   │   ├── marcas/      # CRUD de marcas
+│   │   │   ├── historico/   # histórico de posts
+│   │   │   ├── login/       # autenticação
+│   │   │   ├── cadastro/    # cadastro de usuário
+│   │   │   └── api/         # API routes (chamadas ao Gemini)
+│   │   ├── lib/         # Firebase, auth, Firestore helpers
+│   │   └── context/     # AuthContext (estado global do usuário)
+│   └── .env.example     # variáveis necessárias (sem valores reais)
+└── setup.py             # instalação do CLI Python
+```
+
+---
+
+## Como funciona a geração
+
+1. O usuário seleciona uma marca cadastrada (com cores, tom de voz, exemplos de copy)
+2. Digita o tema do post
+3. O sistema monta um prompt detalhado combinando a identidade visual da marca com o tema
+4. O prompt é enviado para o Gemini com `responseModalities: ["TEXT", "IMAGE"]`
+5. O Gemini retorna a imagem gerada em base64
+6. A imagem é exibida na tela e salva no histórico
+
+Para carrosséis, o sistema gera primeiro o roteiro (sequência de headlines por slide) e depois gera cada slide em paralelo mantendo consistência visual.
+
+---
+
+## CLI (uso local sem interface)
+
+```bash
 pip install -e .
+genara --brand genara/brands/examples/full_contingencia.json --tema "conta bloqueada" --formato story
 ```
 
-## Configuração
-
-1. Pegue sua API key gratuita em [aistudio.google.com](https://aistudio.google.com)
-2. Crie um arquivo `.env`:
-
-```bash
-GEMINI_API_KEY=sua_chave_aqui
-```
-
-Ou passe direto no comando:
-
-```bash
-genara --brand brands/minha_marca.json --tema "lançamento de produto" --api-key SUA_KEY
-```
-
-## Criando sua marca
-
-Copie o template e preencha:
-
-```bash
-cp genara/brands/examples/brand_template.json genara/brands/minha_marca.json
-```
-
-Campos do `brand.json`:
-
-```json
-{
-  "name": "Nome da Empresa",
-  "handle": "handle_instagram",
-  "segment": "descrição do segmento e público-alvo",
-  "tone": "como a marca fala",
-  "visual_style": "descrição do estilo visual",
-  "colors": {
-    "background": "#000000",
-    "primary": "#FFFFFF",
-    "text": "#FFFFFF",
-    "secondary": "#888888"
-  },
-  "copy_examples": {
-    "headline": "exemplo de headline",
-    "subtitle": "exemplo de subtítulo",
-    "cta": "chamada para ação"
-  }
-}
-```
-
-## Formatos
-
-| Flag | Formato | Dimensão |
-|------|---------|----------|
-| `--formato story` | Stories / Reels | 9:16 |
-| `--formato feed` | Feed quadrado | 1:1 |
-
-## Exemplos
-
-```bash
-# Story para tráfego pago
-genara --brand brands/examples/full_contingencia.json --tema "BM com limite alto disponível" --formato story
-
-# Feed para agência de sites
-genara --brand brands/minha_agencia.json --tema "site pronto em 7 dias" --formato feed
-```
-
-## Requisitos
-
-- Python 3.9+
-- Conta Google AI Studio (grátis)
-- `pip install requests`
-
-## Roadmap
-
-- [ ] Geração de carrossel (múltiplos slides)
-- [ ] Modo batch (vários temas de uma vez)
-- [ ] Interface web
-- [ ] Suporte a outros modelos (GPT-4o, Claude)
+---
 
 ## Licença
 
@@ -102,4 +137,4 @@ MIT — use, modifique e distribua livremente.
 
 ---
 
-Feito com ♥ por [@oileer](https://github.com/oileer)
+Feito por [@oileer](https://github.com/oileer)
